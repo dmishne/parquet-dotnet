@@ -92,6 +92,17 @@ namespace Parquet.Test {
                 Assert.Equal(40539, ((float?[])data[0].Data)[0]);
             }
         }
+        
+        [Fact]
+        public async Task Reads_data_page_version_2() {
+            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile("test.new.parquet"), leaveStreamOpen: false)) {
+                DataColumn[] data = await reader.ReadEntireRowGroupAsync();
+
+                //If we made it this far we were able to read all the columns
+                Assert.Single(data[0].Data);
+                //Assert.Equal(40539, ((float?[])data[0].Data)[0]);
+            }
+        }
 
         [Fact]
         public async Task Reads_byte_arrays() {
