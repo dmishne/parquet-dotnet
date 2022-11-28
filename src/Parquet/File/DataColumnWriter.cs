@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Parquet.Data;
+using Parquet.Extensions;
 using Parquet.File.Values;
 
 namespace Parquet.File {
@@ -48,8 +49,8 @@ namespace Parquet.File {
 
             //this count must be set to number of all values in the column, including nulls.
             //for hierarchy/repeated columns this is a count of flattened list, including nulls.
-            chunk.Meta_data.Num_values = ph.Data_page_header.Num_values;
-            ph.Data_page_header.Statistics = chunk.Meta_data.Statistics;   //simply copy statistics to page header
+            chunk.Meta_data.Num_values = ph.GetNumValues();
+            ph.SetStatistics(chunk.Meta_data.Statistics);   //simply copy statistics to page header
 
             //the following counters must include both data size and header size
             chunk.Meta_data.Total_compressed_size = pages.Sum(p => p.HeaderMeta.Compressed_page_size + p.HeaderSize);
@@ -123,7 +124,7 @@ namespace Parquet.File {
                 dataPageHeader.Compressed_page_size = compressedData.AsSpan().Length;
 
                 //write the header in
-                dataPageHeader.Data_page_header.Statistics = column.Statistics.ToThriftStatistics(dataTypeHandler, _schemaElement);
+                dataPageHeader.SetStatistics(column.Statistics.ToThriftStatistics(dataTypeHandler, _schemaElement));
                 int headerSize = await _thriftStream.WriteAsync(dataPageHeader, false, cancellationToken);
                 _stream.Write(compressedData);
 
