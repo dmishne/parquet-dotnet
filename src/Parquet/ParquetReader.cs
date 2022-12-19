@@ -126,9 +126,7 @@ namespace Parquet {
         /// </summary>
         /// <param name="index"></param>
         /// <returns></returns>
-        public ParquetRowGroupReader OpenRowGroupReader(int index) {
-            return _groupReaders[index];
-        }
+        public ParquetRowGroupReader OpenRowGroupReader(int index) => _groupReaders[index];
 
         /// <summary>
         /// Reads entire row group's data columns in one go.
@@ -137,13 +135,13 @@ namespace Parquet {
         /// <returns></returns>
         public async Task<DataColumn[]> ReadEntireRowGroupAsync(int rowGroupIndex = 0) {
             DataField[] dataFields = Schema.GetDataFields();
-            DataColumn[] result = new DataColumn[dataFields.Length];
+            var result = new DataColumn[dataFields.Length];
 
-            using(ParquetRowGroupReader reader = OpenRowGroupReader(rowGroupIndex)) {
-                for(int i = 0; i < dataFields.Length; i++) {
-                    DataColumn column = await reader.ReadColumnAsync(dataFields[i]);
-                    result[i] = column;
-                }
+            using ParquetRowGroupReader reader = OpenRowGroupReader(rowGroupIndex);
+            
+            for(int i = 0; i < dataFields.Length; i++) {
+                DataColumn column = await reader.ReadColumnAsync(dataFields[i]);
+                result[i] = column;
             }
 
             return result;

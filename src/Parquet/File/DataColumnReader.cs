@@ -151,9 +151,14 @@ namespace Parquet.File {
                 return new IronCompress.DataBuffer(data, ph.Compressed_page_size, ArrayPool<byte>.Shared);
             }
 
+            int uncompressedSize = ph.Uncompressed_page_size;
+            if(ph.Type == PageType.DATA_PAGE_V2) {
+                uncompressedSize -= _maxDefinitionLevel - _maxRepetitionLevel;
+            }
+            
             return Compressor.Decompress((CompressionMethod)(int)_thriftColumnChunk.Meta_data.Codec,
                 data.AsSpan(0, ph.Compressed_page_size),
-                ph.Uncompressed_page_size);
+                uncompressedSize);
         }
 
         private async Task<(bool, Array, int)> TryReadDictionaryPage(Thrift.PageHeader ph) {

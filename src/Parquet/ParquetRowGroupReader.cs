@@ -51,9 +51,8 @@ namespace Parquet {
             if(field == null)
                 throw new ArgumentNullException(nameof(field));
 
-            if(!_pathToChunk.TryGetValue(field.Path, out Thrift.ColumnChunk columnChunk)) {
+            if(!_pathToChunk.TryGetValue(field.Path, out Thrift.ColumnChunk columnChunk)) 
                 throw new ParquetException($"'{field.Path}' does not exist in this file");
-            }
 
             var columnReader = new DataColumnReader(field, _stream, columnChunk, _footer, _parquetOptions);
 

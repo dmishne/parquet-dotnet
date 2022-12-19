@@ -95,7 +95,7 @@ namespace Parquet.Test {
         
         [Fact]
         public async Task Reads_data_page_version_2() {
-            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile("test2.parquet"), leaveStreamOpen: false)) {
+            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile("test.new.parquet"), leaveStreamOpen: false)) {
                 DataColumn[] data = await reader.ReadEntireRowGroupAsync();
 
                 //If we made it this far we were able to read all the columns
