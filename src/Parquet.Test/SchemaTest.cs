@@ -239,7 +239,6 @@ namespace Parquet.Test {
                     }
                 }
             }
-
         }
     }
 }
