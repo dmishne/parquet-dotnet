@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Parquet.Data;
+using Parquet.Extensions;
 using Parquet.File.Values;
 using Parquet.Thrift;
 
@@ -62,23 +63,33 @@ namespace Parquet.File {
         }
 
         public async Task<DataColumn> ReadAsync(CancellationToken cancellationToken = default) {
-            long fileOffset = GetFileOffset();
-            long maxValues = _thriftColumnChunk.Meta_data.Num_values;
-
-            _inputStream.Seek(fileOffset, SeekOrigin.Begin);
-
             var colData = new ColumnRawData();
-            colData.maxCount = (int)_thriftColumnChunk.Meta_data.Num_values;
+            Thrift.PageHeader ph;
+            
+            // Directory page exists (there can be only one dictionary page in column)
+            if(_thriftColumnChunk.Meta_data.Dictionary_page_offset != 0) {
+                _inputStream.Seek(_thriftColumnChunk.Meta_data.Dictionary_page_offset, SeekOrigin.Begin);
+                ph = await _thriftStream.ReadAsync<Thrift.PageHeader>(cancellationToken);
+                (bool read, Array data, int offset) = await TryReadDictionaryPage(ph);
+                if(read) {
+                    colData.dictionary = data;
+                    colData.dictionaryOffset = offset;
+                }
+            }
+            ph = await _thriftStream.ReadAsync<Thrift.PageHeader>(cancellationToken);
+            
+            
+            //long fileOffset = GetFileOffset();
+            //long maxValues = _thriftColumnChunk.Meta_data.Num_values;
+
+            
+
+            
+            //colData.maxCount = (int)_thriftColumnChunk.Meta_data.Num_values;
 
             //there can be only one dictionary page in column
-            Thrift.PageHeader ph = await _thriftStream.ReadAsync<Thrift.PageHeader>(cancellationToken);
-            (bool read, Array data, int offset) = await TryReadDictionaryPage(ph);
-            if(read) {
-                colData.dictionary = data;
-                colData.dictionaryOffset = offset;
-                ph = await _thriftStream.ReadAsync<Thrift.PageHeader>(cancellationToken);
-
-            }
+            //Thrift.PageHeader ph = await _thriftStream.ReadAsync<Thrift.PageHeader>(cancellationToken);
+            
 
             int pagesRead = 0;
 
@@ -166,17 +177,17 @@ namespace Parquet.File {
                 return (false, null, 0);
             }
 
-            //Dictionary page format: the entries in the dictionary - in dictionary order - using the plain encoding.
-            using(IronCompress.DataBuffer bytes = await ReadPageData(ph)) {
-                //todo: this is ugly, but will be removed once other parts are migrated to System.Memory
-                using(var ms = new MemoryStream(bytes.AsSpan().ToArray())) {
-                    using(var dataReader = new BinaryReader(ms)) {
-                        Array dictionary = _dataTypeHandler.GetArray(ph.Dictionary_page_header.Num_values, false, false);
-                        int dictionaryOffset = _dataTypeHandler.Read(dataReader, _thriftSchemaElement, dictionary, 0);
-                        return (true, dictionary, dictionaryOffset);
-                    }
-                }
-            }
+            // Dictionary page format: the entries in the dictionary - in dictionary order - using the plain encoding.
+            using IronCompress.DataBuffer bytes = await ReadPageData(ph);
+            //todo: this is ugly, but will be removed once other parts are migrated to System.Memory
+            using var ms = new MemoryStream(bytes.AsSpan().ToArray());
+            using var dataReader = new BinaryReader(ms);
+
+            // Dictionary should not contains null values
+            Array dictionary = _dataTypeHandler.GetArray(ph.Dictionary_page_header.Num_values, false, false);
+            
+            int dictionaryOffset = _dataTypeHandler.Read(dataReader, _thriftSchemaElement, dictionary, 0);
+            return (true, dictionary, dictionaryOffset);
         }
 
         private long GetFileOffset() {
