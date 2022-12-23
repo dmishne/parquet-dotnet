@@ -302,5 +302,12 @@ namespace Parquet.Test.Reader
             typeof(int?),
             typeof(string));
       }
+      
+      [Theory]
+      [InlineData("")]
+      [InlineData("v2")]
+      public async Task ReadSampleFile(string dataPageVersion) {
+          await CompareFilesAsync("table", "", dataPageVersion, false, typeof(double?), typeof(string), typeof(bool?), typeof(string), typeof(DateTimeOffset?));
+      }
    }
 }

@@ -60,7 +60,7 @@ namespace Parquet.Test {
         [InlineData("complex-primitives.parquet")]
         [InlineData("complex-primitives.v2.parquet")]
         public async Task Read_hardcoded_decimal(string parquetFile) {
-            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile("complex-primitives.parquet"))) {
+            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile(parquetFile))) {
                 decimal value = (decimal)(await reader.ReadEntireRowGroupAsync())[1].Data.GetValue(0);
                 Assert.Equal((decimal)1.2, value);
             }
@@ -123,7 +123,7 @@ namespace Parquet.Test {
         [InlineData("/special/multi_data_page.v2.parquet")]
         public async Task Read_multiple_data_pages(string parquetFile) {
             using(ParquetReader reader =
-               await ParquetReader.CreateAsync(OpenTestFile("/special/multi_data_page.parquet"), leaveStreamOpen: false)) {
+               await ParquetReader.CreateAsync(OpenTestFile(parquetFile), leaveStreamOpen: false)) {
                 DataColumn[] columns = await reader.ReadEntireRowGroupAsync();
 
                 string[] s = (string[])columns[0].Data;
@@ -177,7 +177,7 @@ namespace Parquet.Test {
         [InlineData("/special/multi_page_bit_packed_near_page_border.parquet")]
         [InlineData("/special/multi_page_bit_packed_near_page_border.v2.parquet")]
         public async Task Read_bit_packed_at_page_boundary(string parquetFile) {
-            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile("/special/multi_page_bit_packed_near_page_border.parquet"))) {
+            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile(parquetFile))) {
                 DataColumn[] columns = await reader.ReadEntireRowGroupAsync();
                 string[] data = (string[])columns[0].Data;
 
@@ -213,7 +213,7 @@ namespace Parquet.Test {
         public async Task ParquetReader_OpenFromFile_Close_Stream(string parquetFile) {
             // copy a file to a temp location
             string tempFile = Path.GetTempFileName();
-            using(Stream fr = OpenTestFile("map_simple.parquet"))
+            using(Stream fr = OpenTestFile(parquetFile))
             using(FileStream fw = System.IO.File.OpenWrite(tempFile)) {
                 fr.CopyTo(fw);
             }
@@ -231,7 +231,7 @@ namespace Parquet.Test {
         [InlineData("emptycolumn.parquet")]
         [InlineData("emptycolumn.v2.parquet")]
         public async Task ParquetReader_EmptyColumn(string parquetFile) {
-            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile("emptycolumn.parquet"), leaveStreamOpen: false)) {
+            using(ParquetReader reader = await ParquetReader.CreateAsync(OpenTestFile(parquetFile), leaveStreamOpen: false)) {
                 DataColumn[] columns = await reader.ReadEntireRowGroupAsync();
                 int?[] col0 = (int?[])columns[0].Data;
                 Assert.Equal(10, col0.Length);
