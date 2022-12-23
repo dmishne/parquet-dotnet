@@ -268,32 +268,30 @@ namespace Parquet.File {
                 }
             }
 
-            // if statistics are defined, use null count to determine the exact number of items we should read,
-            // otherwise the previously counted value from definitions
-            int maxReadCount = ph.GetStatistics() == null ? numValues : ph.GetNumValues() - (int)ph.GetStatistics().Null_count;
+            int maxReadCount = ph.Data_page_header_v2.Num_values - ph.Data_page_header_v2.Num_nulls;
 
-            if(ph.Data_page_header_v2.Is_compressed) {
-
-
-                int dataSize = ph.Compressed_page_size - ph.Data_page_header_v2.Repetition_levels_byte_length -
-                               ph.Data_page_header_v2.Definition_levels_byte_length;
-                byte[] dataBytes = reader.ReadBytes(dataSize);
-
-                DataBuffer decompressedDataByes = Compressor.Decompress(
-                    (CompressionMethod)(int)_thriftColumnChunk.Meta_data.Codec,
-                    dataBytes.AsSpan(0, dataSize),
-                    ph.Uncompressed_page_size);
-
-                var dataMs = new MemoryStream(decompressedDataByes.AsSpan().ToArray());
-                var dataReader = new BinaryReader(dataMs);
-                
-                ReadColumn(dataReader, ph.GetEncoding(), maxValues, maxReadCount, cd); 
-            }
-            else {
+            if(!ph.Data_page_header_v2.Is_compressed) {
                 ReadColumn(reader, ph.GetEncoding(), maxValues, maxReadCount, cd);
+                return;
             }
 
+            int dataSize = ph.Compressed_page_size - ph.Data_page_header_v2.Repetition_levels_byte_length -
+                           ph.Data_page_header_v2.Definition_levels_byte_length;
+
+            int decompressedSize = ph.Uncompressed_page_size - ph.Data_page_header_v2.Repetition_levels_byte_length -
+                                   ph.Data_page_header_v2.Definition_levels_byte_length;
             
+            byte[] dataBytes = reader.ReadBytes(dataSize);
+            
+            DataBuffer decompressedDataByes = Compressor.Decompress(
+                (CompressionMethod)(int)_thriftColumnChunk.Meta_data.Codec,
+                dataBytes.AsSpan(),
+                decompressedSize);
+
+            var dataMs = new MemoryStream(decompressedDataByes.AsSpan().ToArray());
+            var dataReader = new BinaryReader(dataMs);
+
+            ReadColumn(dataReader, ph.GetEncoding(), maxValues, maxReadCount, cd);
         }
 
         private int ReadLevels(BinaryReader reader, int maxLevel, int[] dest, int offset, int pageSize, int length = 0) {
