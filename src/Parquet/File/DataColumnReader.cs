@@ -172,16 +172,18 @@ namespace Parquet.File {
                 return (false, null, 0);
             }
 
-            // Dictionary page format: the entries in the dictionary - in dictionary order - using the plain encoding.
-            using IronCompress.DataBuffer bytes = await ReadPageData(ph);
-            //todo: this is ugly, but will be removed once other parts are migrated to System.Memory
-            using var ms = new MemoryStream(bytes.AsSpan().ToArray());
-            using var dataReader = new BinaryReader(ms);
-
-            // Dictionary should not contains null values
-            Array dictionary = _dataTypeHandler.GetArray(ph.Dictionary_page_header.Num_values, false, false);
-            int dictionaryOffset = _dataTypeHandler.Read(dataReader, _thriftSchemaElement, dictionary, 0);
-            return (true, dictionary, dictionaryOffset);
+            //Dictionary page format: the entries in the dictionary - in dictionary order - using the plain encoding.
+            using(IronCompress.DataBuffer bytes = await ReadPageData(ph)) {
+                //todo: this is ugly, but will be removed once other parts are migrated to System.Memory
+                using(var ms = new MemoryStream(bytes.AsSpan().ToArray())) {
+                    using(var dataReader = new BinaryReader(ms)) {
+                        // Dictionary should not contains null values
+                        Array dictionary = _dataTypeHandler.GetArray(ph.Dictionary_page_header.Num_values, false, false);
+                        int dictionaryOffset = _dataTypeHandler.Read(dataReader, _thriftSchemaElement, dictionary, 0);
+                        return (true, dictionary, dictionaryOffset);
+                    }
+                }
+            }
         }
 
         private long GetFileOffset() {
@@ -200,18 +202,19 @@ namespace Parquet.File {
         private async Task ReadDataPage(Thrift.PageHeader ph, ColumnRawData cd, long maxValues) {
             using(IronCompress.DataBuffer bytes = await ReadPageData(ph)) {
                 //todo: this is ugly, but will be removed once other parts are migrated to System.Memory
-                if(ph.Data_page_header == null) 
+                if(ph.Data_page_header == null) {
                     throw new ParquetException($"column '{_dataField.Path}' is missing data page header, file is corrupt");
-
+                }
+ 
                 using(var ms = new MemoryStream(bytes.AsSpan().ToArray())) {
-                    int numValues = ph.GetNumValues();
+                    int valueCount = ph.Data_page_header.Num_values;
                     using(var reader = new BinaryReader(ms)) {
                         if(_maxRepetitionLevel > 0) {
                             //todo: use rented buffers, but be aware that rented length can be more than requested so underlying logic relying on array length must be fixed too.
                             if(cd.repetitions == null)
                                 cd.repetitions = new int[cd.maxCount];
 
-                            cd.repetitionsOffset += ReadLevels(reader, _maxRepetitionLevel, cd.repetitions, cd.repetitionsOffset, ph.GetNumValues());
+                            cd.repetitionsOffset += ReadLevels(reader, _maxRepetitionLevel, cd.repetitions, cd.repetitionsOffset, ph.Data_page_header.Num_values);
                         }
 
                         if(_maxDefinitionLevel > 0) {
@@ -219,10 +222,10 @@ namespace Parquet.File {
                                 cd.definitions = new int[cd.maxCount];
 
                             int offsetBeforeReading = cd.definitionsOffset;
-                            cd.definitionsOffset += ReadLevels(reader, _maxDefinitionLevel, cd.definitions, cd.definitionsOffset, ph.GetNumValues());
+                            cd.definitionsOffset += ReadLevels(reader, _maxDefinitionLevel, cd.definitions, cd.definitionsOffset, ph.Data_page_header.Num_values);
                             // if no statistics are available, we use the number of values expected, based on the definitions
-                            if(ph.GetStatistics() == null) {
-                                numValues = cd.definitions
+                            if(ph.Data_page_header.Statistics == null) {
+                                valueCount = cd.definitions
                                    .Skip(offsetBeforeReading).Take(cd.definitionsOffset - offsetBeforeReading)
                                    .Count(v => v > 0);
                             }
@@ -230,9 +233,9 @@ namespace Parquet.File {
 
                         // if statistics are defined, use null count to determine the exact number of items we should read,
                         // otherwise the previously counted value from definitions
-                        int maxReadCount = ph.GetStatistics() == null ? numValues
-                           : ph.GetNumValues() - (int)ph.GetStatistics().Null_count;
-                        ReadColumn(reader, ph.GetEncoding(), maxValues, maxReadCount, cd);
+                        int maxReadCount = ph.Data_page_header.Statistics == null ? valueCount
+                           : ph.Data_page_header.Num_values - (int)ph.Data_page_header.Statistics.Null_count;
+                        ReadColumn(reader, ph.Data_page_header.Encoding, maxValues, maxReadCount, cd);
                     }
                 }
             }
@@ -246,32 +249,22 @@ namespace Parquet.File {
 
             using var ms = new MemoryStream(bytes);
             using var reader = new BinaryReader(ms);
-            int numValues = ph.GetNumValues();
-            
+
             if(_maxRepetitionLevel > 0) {
                 //todo: use rented buffers, but be aware that rented length can be more than requested so underlying logic relying on array length must be fixed too.
                 cd.repetitions ??= new int[cd.maxCount];
-                cd.repetitionsOffset += ReadLevels(reader, _maxRepetitionLevel, cd.repetitions, cd.repetitionsOffset, ph.GetNumValues(), ph.Data_page_header_v2.Repetition_levels_byte_length);
+                cd.repetitionsOffset += ReadLevels(reader, _maxRepetitionLevel, cd.repetitions, cd.repetitionsOffset, ph.Data_page_header_v2.Num_values, ph.Data_page_header_v2.Repetition_levels_byte_length);
             }
 
             if(_maxDefinitionLevel > 0) {
                 cd.definitions ??= new int[cd.maxCount];
-
-                int offsetBeforeReading = cd.definitionsOffset;
-                cd.definitionsOffset += ReadLevels(reader, _maxDefinitionLevel, cd.definitions, cd.definitionsOffset, ph.GetNumValues(), ph.Data_page_header_v2.Definition_levels_byte_length);
-
-                // if no statistics are available, we use the number of values expected, based on the definitions
-                if(ph.GetStatistics() == null) {
-                    numValues = cd.definitions
-                        .Skip(offsetBeforeReading).Take(cd.definitionsOffset - offsetBeforeReading)
-                        .Count(v => v > 0);
-                }
+                cd.definitionsOffset += ReadLevels(reader, _maxDefinitionLevel, cd.definitions, cd.definitionsOffset, ph.Data_page_header_v2.Num_values, ph.Data_page_header_v2.Definition_levels_byte_length);
             }
 
             int maxReadCount = ph.Data_page_header_v2.Num_values - ph.Data_page_header_v2.Num_nulls;
 
             if(!ph.Data_page_header_v2.Is_compressed) {
-                ReadColumn(reader, ph.GetEncoding(), maxValues, maxReadCount, cd);
+                ReadColumn(reader, ph.Data_page_header_v2.Encoding, maxValues, maxReadCount, cd);
                 return;
             }
 
@@ -291,7 +284,7 @@ namespace Parquet.File {
             var dataMs = new MemoryStream(decompressedDataByes.AsSpan().ToArray());
             var dataReader = new BinaryReader(dataMs);
 
-            ReadColumn(dataReader, ph.GetEncoding(), maxValues, maxReadCount, cd);
+            ReadColumn(dataReader, ph.Data_page_header_v2.Encoding, maxValues, maxReadCount, cd);
         }
 
         private int ReadLevels(BinaryReader reader, int maxLevel, int[] dest, int offset, int pageSize, int length = 0) {
