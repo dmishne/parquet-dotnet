@@ -4,9 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using IronCompress;
 using Parquet.Data;
-using Parquet.Extensions;
 using Parquet.File.Values;
 using Parquet.Thrift;
 
@@ -187,7 +185,7 @@ namespace Parquet.File {
         }
 
         private long GetFileOffset() {
-            // get the minimum offset, we'll just read pages in sequence as Dictionary_page_offset/Data_page_offset is not reliable
+            // get the minimum offset, we'll just read pages in sequence as Dictionary_page_offset/Data_page_offset are not reliable
 
             return
                new[]
@@ -276,7 +274,7 @@ namespace Parquet.File {
             
             byte[] dataBytes = reader.ReadBytes(dataSize);
             
-            DataBuffer decompressedDataByes = Compressor.Decompress(
+            IronCompress.DataBuffer decompressedDataByes = Compressor.Decompress(
                 (CompressionMethod)(int)_thriftColumnChunk.Meta_data.Codec,
                 dataBytes.AsSpan(),
                 decompressedSize);
